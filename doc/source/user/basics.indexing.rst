@@ -28,6 +28,7 @@ Note that in Python, ``x[(exp1, exp2, ..., expN)]`` is equivalent to
 ``x[exp1, exp2, ..., expN]``; the latter is just syntactic sugar
 for the former.
 
+.. _basic-indexing:
 
 Basic indexing
 --------------
@@ -88,6 +89,7 @@ that is subsequently indexed by 2.
     rapidly changing location in memory. This difference represents a
     great potential for confusion.
 
+.. _slicing-and-striding:
 
 Slicing and striding
 ^^^^^^^^^^^^^^^^^^^^
@@ -226,6 +228,7 @@ concepts to remember include:
 .. index::
    pair: ndarray; view
 
+.. _dimensional-indexing-tools:
 
 Dimensional indexing tools
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -325,6 +328,8 @@ If the index values are out of bounds then an ``IndexError`` is thrown::
     array([[3, 4],
           [5, 6]])
     >>> x[np.array([3, 4])]
+    Traceback (most recent call last):
+      ...
     IndexError: index 3 is out of bounds for axis 0 with size 3
 
 When the index consists of as many integer arrays as dimensions of the array
@@ -368,6 +373,8 @@ broadcast them to the same shape. If they cannot be broadcast to the same
 shape, an exception is raised::
 
     >>> y[np.array([0, 2, 4]), np.array([0, 1])]
+    Traceback (most recent call last):
+      ...
     IndexError: shape mismatch: indexing arrays could not be broadcast
     together with shapes (3,) (2,)
 
@@ -470,6 +477,7 @@ such an array with an image with shape (ny, nx) with dtype=np.uint8
 lookup table) will result in an array of shape (ny, nx, 3) where a
 triple of RGB values is associated with each pixel location.
 
+.. _boolean-indexing:
 
 Boolean array indexing
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -502,7 +510,7 @@ Or wish to add a constant to all negative elements::
     >>> x = np.array([1., -1., -2., 3])
     >>> x[x < 0] += 20
     >>> x
-    array([1., 19., 18., 3.])
+    array([ 1., 19., 18., 3.])
 
 In general if an index includes a Boolean array, the result will be
 identical to inserting ``obj.nonzero()`` into the same position
@@ -786,6 +794,8 @@ exceptions (assigning complex to floats or ints): ::
  >>> x[1]
  1
  >>> x[1] = 1.2j
+ Traceback (most recent call last):
+   ...
  TypeError: can't convert complex to int
 
 
@@ -851,7 +861,7 @@ For this reason, it is possible to use the output from the
 :meth:`np.nonzero() <ndarray.nonzero>` function directly as an index since
 it always returns a tuple of index arrays.
 
-Because the special treatment of tuples, they are not automatically
+Because of the special treatment of tuples, they are not automatically
 converted to an array as a list would be. As an example: ::
 
  >>> z[[1, 1, 1, 1]]  # produces a large array

@@ -21,6 +21,17 @@ typedef enum {
     NPY_METH_NO_FLOATINGPOINT_ERRORS = 1 << 2,
     /* Whether the method supports unaligned access (not runtime) */
     NPY_METH_SUPPORTS_UNALIGNED = 1 << 3,
+    /*
+     * Private flag for now for *logic* functions.  The logical functions
+     * `logical_or` and `logical_and` can always cast the inputs to booleans
+     * "safely" (because that is how the cast to bool is defined).
+     * @seberg: I am not sure this is the best way to handle this, so its
+     * private for now (also it is very limited anyway).
+     * There is one "exception". NA aware dtypes cannot cast to bool
+     * (hopefully), so the `??->?` loop should error even with this flag.
+     * But a second NA fallback loop will be necessary.
+     */
+    _NPY_METH_FORCE_CAST_INPUTS = 1 << 17,
 
     /* All flags which can change at runtime */
     NPY_METH_RUNTIME_FLAGS = (
@@ -59,7 +70,8 @@ typedef NPY_CASTING (resolve_descriptors_function)(
         struct PyArrayMethodObject_tag *method,
         PyArray_DTypeMeta **dtypes,
         PyArray_Descr **given_descrs,
-        PyArray_Descr **loop_descrs);
+        PyArray_Descr **loop_descrs,
+        npy_intp *view_offset);
 
 
 typedef int (get_loop_function)(
@@ -168,6 +180,11 @@ PyArrayMethod_GetMaskedStridedLoop(
         PyArrayMethod_StridedLoop **out_loop,
         NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags);
+
+
+
+NPY_NO_EXPORT PyObject *
+PyArrayMethod_FromSpec(PyArrayMethod_Spec *spec);
 
 
 /*

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# NOTE: Import `Sequence` from `typing` as we it is needed for a type-alias,
+# not an annotation
+from collections.abc import Collection, Callable
 from typing import Any, Sequence, Protocol, Union, TypeVar
 from numpy import (
     ndarray,
@@ -18,6 +21,7 @@ from numpy import (
     str_,
     bytes_,
 )
+from ._nested_sequence import _NestedSequence
 
 _T = TypeVar("_T")
 _ScalarType = TypeVar("_ScalarType", bound=generic)
@@ -32,21 +36,34 @@ _DType_co = TypeVar("_DType_co", covariant=True, bound="dtype[Any]")
 class _SupportsArray(Protocol[_DType_co]):
     def __array__(self) -> ndarray[Any, _DType_co]: ...
 
-# TODO: Wait for support for recursive types
-_NestedSequence = Union[
+
+class _SupportsArrayFunc(Protocol):
+    """A protocol class representing `~class.__array_function__`."""
+    def __array_function__(
+        self,
+        func: Callable[..., Any],
+        types: Collection[type[Any]],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> object: ...
+
+
+# TODO: Wait until mypy supports recursive objects in combination with typevars
+_FiniteNestedSequence = Union[
     _T,
     Sequence[_T],
     Sequence[Sequence[_T]],
     Sequence[Sequence[Sequence[_T]]],
     Sequence[Sequence[Sequence[Sequence[_T]]]],
 ]
-_RecursiveSequence = Sequence[Sequence[Sequence[Sequence[Sequence[Any]]]]]
 
 # A union representing array-like objects; consists of two typevars:
 # One representing types that can be parametrized w.r.t. `np.dtype`
 # and another one for the rest
 _ArrayLike = Union[
+    _SupportsArray[_DType],
     _NestedSequence[_SupportsArray[_DType]],
+    _T,
     _NestedSequence[_T],
 ]
 
@@ -57,12 +74,9 @@ _ArrayLike = Union[
 # is resolved. See also the mypy issue:
 #
 # https://github.com/python/typing/issues/593
-ArrayLike = Union[
-    _RecursiveSequence,
-    _ArrayLike[
-        dtype,
-        Union[bool, int, float, complex, str, bytes]
-    ],
+ArrayLike = _ArrayLike[
+    dtype,
+    Union[bool, int, float, complex, str, bytes],
 ]
 
 # `ArrayLike<X>_co`: array-like objects that can be coerced into `X`
@@ -95,10 +109,19 @@ _ArrayLikeTD64_co = _ArrayLike[
     "dtype[Union[bool_, integer[Any], timedelta64]]",
     Union[bool, int],
 ]
-_ArrayLikeDT64_co = _NestedSequence[_SupportsArray["dtype[datetime64]"]]
-_ArrayLikeObject_co = _NestedSequence[_SupportsArray["dtype[object_]"]]
+_ArrayLikeDT64_co = Union[
+    _SupportsArray["dtype[datetime64]"],
+    _NestedSequence[_SupportsArray["dtype[datetime64]"]],
+]
+_ArrayLikeObject_co = Union[
+    _SupportsArray["dtype[object_]"],
+    _NestedSequence[_SupportsArray["dtype[object_]"]],
+]
 
-_ArrayLikeVoid_co = _NestedSequence[_SupportsArray["dtype[void]"]]
+_ArrayLikeVoid_co = Union[
+    _SupportsArray["dtype[void]"],
+    _NestedSequence[_SupportsArray["dtype[void]"]],
+]
 _ArrayLikeStr_co = _ArrayLike[
     "dtype[str_]",
     str,

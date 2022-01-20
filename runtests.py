@@ -192,7 +192,12 @@ def main(argv):
         site_dir, site_dir_noarch = build_project(args)
         sys.path.insert(0, site_dir)
         sys.path.insert(0, site_dir_noarch)
-        os.environ['PYTHONPATH'] = site_dir + os.pathsep + site_dir_noarch
+        os.environ['PYTHONPATH'] = \
+            os.pathsep.join((
+                site_dir, 
+                site_dir_noarch, 
+                os.environ.get('PYTHONPATH', '')
+            ))
     else:
         _temp = __import__(PROJECT_MODULE)
         site_dir = os.path.sep.join(_temp.__file__.split(os.path.sep)[:-2])
@@ -474,23 +479,18 @@ def build_project(args):
             '--single-version-externally-managed',
             '--record=' + dst_dir + 'tmp_install_log.txt']
 
-    py_v_s = sysconfig.get_config_var('py_version_short')
-    platlibdir = getattr(sys, 'platlibdir', '')  # Python3.9+
+    config_vars = dict(sysconfig.get_config_vars())
+    config_vars["platbase"] = dst_dir
+    config_vars["base"] = dst_dir
+
     site_dir_template = os.path.normpath(sysconfig.get_path(
         'platlib', expand=False
     ))
-    site_dir = site_dir_template.format(platbase=dst_dir,
-                                        py_version_short=py_v_s,
-                                        platlibdir=platlibdir,
-                                        base=dst_dir,
-                                        )
+    site_dir = site_dir_template.format(**config_vars)
     noarch_template = os.path.normpath(sysconfig.get_path(
         'purelib', expand=False
     ))
-    site_dir_noarch = noarch_template.format(base=dst_dir,
-                                             py_version_short=py_v_s,
-                                             platlibdir=platlibdir,
-                                             )
+    site_dir_noarch = noarch_template.format(**config_vars)
 
     # easy_install won't install to a path that Python by default cannot see
     # and isn't on the PYTHONPATH.  Plus, it has to exist.
@@ -498,7 +498,8 @@ def build_project(args):
         os.makedirs(site_dir)
     if not os.path.exists(site_dir_noarch):
         os.makedirs(site_dir_noarch)
-    env['PYTHONPATH'] = site_dir + os.pathsep + site_dir_noarch
+    env['PYTHONPATH'] = \
+        os.pathsep.join((site_dir, site_dir_noarch, env.get('PYTHONPATH', '')))
 
     log_filename = os.path.join(ROOT_DIR, 'build.log')
 

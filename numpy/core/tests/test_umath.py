@@ -15,22 +15,10 @@ from numpy.testing import (
     assert_, assert_equal, assert_raises, assert_raises_regex,
     assert_array_equal, assert_almost_equal, assert_array_almost_equal,
     assert_array_max_ulp, assert_allclose, assert_no_warnings, suppress_warnings,
-    _gen_alignment_data, assert_array_almost_equal_nulp, assert_warns
+    _gen_alignment_data, assert_array_almost_equal_nulp
     )
+from numpy.testing._private.utils import _glibc_older_than
 
-def get_glibc_version():
-    try:
-        ver = os.confstr('CS_GNU_LIBC_VERSION').rsplit(' ')[1]
-    except Exception as inst:
-        ver = '0.0'
-
-    return ver
-
-
-glibcver = get_glibc_version()
-glibc_newerthan_2_17 = pytest.mark.xfail(
-        glibcver != '0.0' and glibcver < '2.17',
-        reason="Older glibc versions may not raise appropriate FP exceptions")
 
 def on_powerpc():
     """ True if we are running on a Power PC platform."""
@@ -49,14 +37,6 @@ def bad_arcsinh():
     v2 = np.arcsinh(np.complex256(x)).real
     # The eps for float128 is 1-e33, so this is way bigger
     return abs((v1 / v2) - 1.0) > 1e-23
-
-if platform.machine() == 'aarch64' and bad_arcsinh():
-    skip_longcomplex_msg = ('Trig functions of np.longcomplex values known to be '
-                            'inaccurate on aarch64 for some compilation '
-                            'configurations, should be fixed by building on a '
-                            'platform using glibc>2.17')
-else:
-    skip_longcomplex_msg = ''
 
 
 class _FilterInvalids:
@@ -973,6 +953,12 @@ class TestLog:
         xf = np.log(x)
         assert_almost_equal(np.log(x, out=x), xf)
 
+        # test log() of max for dtype does not raise
+        for dt in ['f', 'd', 'g']:
+            with np.errstate(all='raise'):
+                x = np.finfo(dt).max
+                np.log(x)
+
     def test_log_strides(self):
         np.random.seed(42)
         strides = np.array([-4,-3,-2,-1,1,2,3,4])
@@ -1016,9 +1002,11 @@ class TestSpecialFloats:
             yf = np.array(y, dtype=dt)
             assert_equal(np.exp(yf), xf)
 
-    # Older version of glibc may not raise the correct FP exceptions
     # See: https://github.com/numpy/numpy/issues/19192
-    @glibc_newerthan_2_17
+    @pytest.mark.xfail(
+        _glibc_older_than("2.17"),
+        reason="Older glibc versions may not raise appropriate FP exceptions"
+    )
     def test_exp_exceptions(self):
         with np.errstate(over='raise'):
             assert_raises(FloatingPointError, np.exp, np.float32(100.))
@@ -1264,6 +1252,11 @@ class TestSpecialFloats:
                     assert_raises(FloatingPointError, np.arctanh,
                                   np.array(value, dtype=dt))
 
+    # See: https://github.com/numpy/numpy/issues/20448
+    @pytest.mark.xfail(
+        _glibc_older_than("2.17"),
+        reason="Older glibc versions may not raise appropriate FP exceptions"
+    )
     def test_exp2(self):
         with np.errstate(all='ignore'):
             in_ = [np.nan, -np.nan, np.inf, -np.inf]
@@ -1399,8 +1392,10 @@ class TestAVXFloat32Transcendental:
         M = np.int_(N/20)
         index = np.random.randint(low=0, high=N, size=M)
         x_f32 = np.float32(np.random.uniform(low=-100.,high=100.,size=N))
-        # test coverage for elements > 117435.992f for which glibc is used
-        x_f32[index] = np.float32(10E+10*np.random.rand(M))
+        if not _glibc_older_than("2.17"):
+            # test coverage for elements > 117435.992f for which glibc is used
+            # this is known to be problematic on old glibc, so skip it there
+            x_f32[index] = np.float32(10E+10*np.random.rand(M))
         x_f64 = np.float64(x_f32)
         assert_array_max_ulp(np.sin(x_f32), np.float32(np.sin(x_f64)), maxulp=2)
         assert_array_max_ulp(np.cos(x_f32), np.float32(np.cos(x_f64)), maxulp=2)
@@ -3434,12 +3429,13 @@ class TestComplexFunctions:
         x_basic = np.logspace(-2.999, 0, 10, endpoint=False)
 
         if dtype is np.longcomplex:
+            if (platform.machine() == 'aarch64' and bad_arcsinh()):
+                pytest.skip("Trig functions of np.longcomplex values known "
+                            "to be inaccurate on aarch64 for some compilation "
+                            "configurations.")
             # It's not guaranteed that the system-provided arc functions
             # are accurate down to a few epsilons. (Eg. on Linux 64-bit)
             # So, give more leeway for long complex tests here:
-            # Can use 2.1 for > Ubuntu LTS Trusty (2014), glibc = 2.19.
-            if skip_longcomplex_msg:
-                pytest.skip(skip_longcomplex_msg)
             check(x_series, 50.0*eps)
         else:
             check(x_series, 2.1*eps)
@@ -3852,3 +3848,39 @@ def test_outer_exceeds_maxdims():
     with assert_raises(ValueError):
         np.add.outer(deep, deep)
 
+def test_bad_legacy_ufunc_silent_errors():
+    # legacy ufuncs can't report errors and NumPy can't check if the GIL
+    # is released.  So NumPy has to check after the GIL is released just to
+    # cover all bases.  `np.power` uses/used to use this.
+    arr = np.arange(3).astype(np.float64)
+
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        ncu_tests.always_error(arr, arr)
+
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        # not contiguous means the fast-path cannot be taken
+        non_contig = arr.repeat(20).reshape(-1, 6)[:, ::2]
+        ncu_tests.always_error(non_contig, arr)
+
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        ncu_tests.always_error.outer(arr, arr)
+
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        ncu_tests.always_error.reduce(arr)
+
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        ncu_tests.always_error.reduceat(arr, [0, 1])
+
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        ncu_tests.always_error.accumulate(arr)
+
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        ncu_tests.always_error.at(arr, [0, 1, 2], arr)
+
+
+@pytest.mark.parametrize('x1', [np.arange(3.0), [0.0, 1.0, 2.0]])
+def test_bad_legacy_gufunc_silent_errors(x1):
+    # Verify that an exception raised in a gufunc loop propagates correctly.
+    # The signature of always_error_gufunc is '(i),()->()'.
+    with pytest.raises(RuntimeError, match=r"How unexpected :\)!"):
+        ncu_tests.always_error_gufunc(x1, 0.0)

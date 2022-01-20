@@ -592,7 +592,7 @@ def average(a, axis=None, weights=None, returned=False):
         avg = a.mean(axis)
         scl = avg.dtype.type(a.count(axis))
     else:
-        wgt = np.asanyarray(weights)
+        wgt = asarray(weights)
 
         if issubclass(a.dtype.type, (np.integer, np.bool_)):
             result_dtype = np.result_type(a.dtype, wgt.dtype, 'f8')
@@ -618,6 +618,7 @@ def average(a, axis=None, weights=None, returned=False):
 
         if m is not nomask:
             wgt = wgt*(~a.mask)
+            wgt.mask |= a.mask
 
         scl = wgt.sum(axis=axis, dtype=result_dtype)
         avg = np.multiply(a, wgt, dtype=result_dtype).sum(axis)/scl
@@ -750,7 +751,7 @@ def _median(a, axis=None, out=None, overwrite_input=False):
             s = mid.sum(out=out)
             if not odd:
                 s = np.true_divide(s, 2., casting='safe', out=out)
-            s = np.lib.utils._median_nancheck(asorted, s, axis, out)
+            s = np.lib.utils._median_nancheck(asorted, s, axis)
         else:
             s = mid.mean(out=out)
 
@@ -790,7 +791,7 @@ def _median(a, axis=None, out=None, overwrite_input=False):
         s = np.ma.sum(low_high, axis=axis, out=out)
         np.true_divide(s.data, 2., casting='unsafe', out=s.data)
 
-        s = np.lib.utils._median_nancheck(asorted, s, axis, out)
+        s = np.lib.utils._median_nancheck(asorted, s, axis)
     else:
         s = np.ma.mean(low_high, axis=axis, out=out)
 
