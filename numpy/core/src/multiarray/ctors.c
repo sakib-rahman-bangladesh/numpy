@@ -2128,11 +2128,31 @@ PyArray_FromStructInterface(PyObject *input)
         }
     }
 
+    /* a tuple to hold references */
+    PyObject *refs = PyTuple_New(2);
+    if (!refs) {
+        Py_DECREF(attr);
+        return NULL;
+    }
+
+    /* add a reference to the object sharing the data */
+    Py_INCREF(input);
+    PyTuple_SET_ITEM(refs, 0, input);
+
+    /* take a reference to the PyCapsule containing the PyArrayInterface
+     * structure. When the PyCapsule reference is released the PyCapsule
+     * destructor will free any resources that need to persist while numpy has
+     * access to the data. */
+    PyTuple_SET_ITEM(refs, 1,  attr);
+
+    /* create the numpy array, this call adds a reference to refs */
     PyObject *ret = PyArray_NewFromDescrAndBase(
             &PyArray_Type, thetype,
             inter->nd, inter->shape, inter->strides, inter->data,
-            inter->flags, NULL, input);
-    Py_DECREF(attr);
+            inter->flags, NULL, refs);
+
+    Py_DECREF(refs);
+
     return ret;
 
  fail:
@@ -2163,38 +2183,6 @@ _is_default_descr(PyObject *descr, PyObject *typestr) {
 }
 
 
-/*
- * A helper function to transition away from ignoring errors during
- * special attribute lookups during array coercion.
- */
-static NPY_INLINE int
-deprecated_lookup_error_clearing(PyTypeObject *type, char *attribute)
-{
-    PyObject *exc_type, *exc_value, *traceback;
-    PyErr_Fetch(&exc_type, &exc_value, &traceback);
-
-    /* DEPRECATED 2021-05-12, NumPy 1.21. */
-    int res = PyErr_WarnFormat(PyExc_DeprecationWarning, 1,
-            "An exception was ignored while fetching the attribute `%s` from "
-            "an object of type '%s'.  With the exception of `AttributeError` "
-            "NumPy will always raise this exception in the future.  Raise this "
-            "deprecation warning to see the original exception. "
-            "(Warning added NumPy 1.21)", attribute, type->tp_name);
-
-    if (res < 0) {
-        npy_PyErr_ChainExceptionsCause(exc_type, exc_value, traceback);
-        return -1;
-    }
-    else {
-        /* `PyErr_Fetch` cleared the original error, delete the references */
-        Py_DECREF(exc_type);
-        Py_XDECREF(exc_value);
-        Py_XDECREF(traceback);
-        return 0;
-    }
-}
-
-
 /*NUMPY_API*/
 NPY_NO_EXPORT PyObject *
 PyArray_FromInterface(PyObject *origin)
@@ -2214,15 +2202,7 @@ PyArray_FromInterface(PyObject *origin)
 
     if (iface == NULL) {
         if (PyErr_Occurred()) {
-            if (PyErr_ExceptionMatches(PyExc_RecursionError) ||
-                    PyErr_ExceptionMatches(PyExc_MemoryError)) {
-                /* RecursionError and MemoryError are considered fatal */
-                return NULL;
-            }
-            if (deprecated_lookup_error_clearing(
-                    Py_TYPE(origin), "__array_interface__") < 0) {
-                return NULL;
-            }
+            return NULL;
         }
         return Py_NotImplemented;
     }
@@ -2502,15 +2482,7 @@ PyArray_FromArrayAttr_int(
     array_meth = PyArray_LookupSpecial_OnInstance(op, "__array__");
     if (array_meth == NULL) {
         if (PyErr_Occurred()) {
-            if (PyErr_ExceptionMatches(PyExc_RecursionError) ||
-                PyErr_ExceptionMatches(PyExc_MemoryError)) {
-                /* RecursionError and MemoryError are considered fatal */
-                return NULL;
-            }
-            if (deprecated_lookup_error_clearing(
-                    Py_TYPE(op), "__array__") < 0) {
-                return NULL;
-            }
+            return NULL;
         }
         return Py_NotImplemented;
     }
