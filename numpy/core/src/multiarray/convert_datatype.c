@@ -245,6 +245,12 @@ PyArray_CastToType(PyArrayObject *arr, PyArray_Descr *dtype, int is_f_order)
 {
     PyObject *out;
 
+    if (dtype == NULL) {
+        PyErr_SetString(PyExc_ValueError,
+            "dtype is NULL in PyArray_CastToType");
+        return NULL;
+    }
+
     Py_SETREF(dtype, PyArray_AdaptDescriptorToArray(arr, (PyObject *)dtype));
     if (dtype == NULL) {
         return NULL;
@@ -925,22 +931,6 @@ promote_types(PyArray_Descr *type1, PyArray_Descr *type2,
         return PyArray_PromoteTypes(type1, type2);
     }
 
-}
-
-/*
- * Returns a new reference to type if it is already NBO, otherwise
- * returns a copy converted to NBO.
- */
-NPY_NO_EXPORT PyArray_Descr *
-ensure_dtype_nbo(PyArray_Descr *type)
-{
-    if (PyArray_ISNBO(type->byteorder)) {
-        Py_INCREF(type);
-        return type;
-    }
-    else {
-        return PyArray_DescrNewByteorder(type, NPY_NATIVE);
-    }
 }
 
 
@@ -1636,7 +1626,7 @@ PyArray_ResultType(
                     "no arrays or types available to calculate result type");
             return NULL;
         }
-        return ensure_dtype_nbo(result);
+        return NPY_DT_CALL_ensure_canonical(result);
     }
 
     void **info_on_heap = NULL;
@@ -2315,7 +2305,7 @@ legacy_same_dtype_resolve_descriptors(
     loop_descrs[0] = given_descrs[0];
 
     if (given_descrs[1] == NULL) {
-        loop_descrs[1] = ensure_dtype_nbo(loop_descrs[0]);
+        loop_descrs[1] = NPY_DT_CALL_ensure_canonical(loop_descrs[0]);
         if (loop_descrs[1] == NULL) {
             Py_DECREF(loop_descrs[0]);
             return -1;
@@ -2380,12 +2370,12 @@ simple_cast_resolve_descriptors(
 {
     assert(NPY_DT_is_legacy(dtypes[0]) && NPY_DT_is_legacy(dtypes[1]));
 
-    loop_descrs[0] = ensure_dtype_nbo(given_descrs[0]);
+    loop_descrs[0] = NPY_DT_CALL_ensure_canonical(given_descrs[0]);
     if (loop_descrs[0] == NULL) {
         return -1;
     }
     if (given_descrs[1] != NULL) {
-        loop_descrs[1] = ensure_dtype_nbo(given_descrs[1]);
+        loop_descrs[1] = NPY_DT_CALL_ensure_canonical(given_descrs[1]);
         if (loop_descrs[1] == NULL) {
             Py_DECREF(loop_descrs[0]);
             return -1;
@@ -2452,7 +2442,7 @@ get_byteswap_loop(
 NPY_NO_EXPORT int
 complex_to_noncomplex_get_loop(
         PyArrayMethod_Context *context,
-        int aligned, int move_references, npy_intp *strides,
+        int aligned, int move_references, const npy_intp *strides,
         PyArrayMethod_StridedLoop **out_loop, NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)
 {
@@ -2672,14 +2662,14 @@ cast_to_string_resolve_descriptors(
     }
     else {
         /* The legacy loop can handle mismatching itemsizes */
-        loop_descrs[1] = ensure_dtype_nbo(given_descrs[1]);
+        loop_descrs[1] = NPY_DT_CALL_ensure_canonical(given_descrs[1]);
         if (loop_descrs[1] == NULL) {
             return -1;
         }
     }
 
     /* Set the input one as well (late for easier error management) */
-    loop_descrs[0] = ensure_dtype_nbo(given_descrs[0]);
+    loop_descrs[0] = NPY_DT_CALL_ensure_canonical(given_descrs[0]);
     if (loop_descrs[0] == NULL) {
         return -1;
     }
@@ -2754,7 +2744,7 @@ string_to_string_resolve_descriptors(
     loop_descrs[0] = given_descrs[0];
 
     if (given_descrs[1] == NULL) {
-        loop_descrs[1] = ensure_dtype_nbo(loop_descrs[0]);
+        loop_descrs[1] = NPY_DT_CALL_ensure_canonical(loop_descrs[0]);
         if (loop_descrs[1] == NULL) {
             return -1;
         }
@@ -2793,7 +2783,7 @@ string_to_string_resolve_descriptors(
 NPY_NO_EXPORT int
 string_to_string_get_loop(
         PyArrayMethod_Context *context,
-        int aligned, int NPY_UNUSED(move_references), npy_intp *strides,
+        int aligned, int NPY_UNUSED(move_references), const npy_intp *strides,
         PyArrayMethod_StridedLoop **out_loop, NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)
 {
@@ -3042,7 +3032,7 @@ static int
 nonstructured_to_structured_get_loop(
         PyArrayMethod_Context *context,
         int aligned, int move_references,
-        npy_intp *strides,
+        const npy_intp *strides,
         PyArrayMethod_StridedLoop **out_loop,
         NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)
@@ -3204,7 +3194,7 @@ static int
 structured_to_nonstructured_get_loop(
         PyArrayMethod_Context *context,
         int aligned, int move_references,
-        npy_intp *strides,
+        const npy_intp *strides,
         PyArrayMethod_StridedLoop **out_loop,
         NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)
@@ -3504,7 +3494,7 @@ NPY_NO_EXPORT int
 void_to_void_get_loop(
         PyArrayMethod_Context *context,
         int aligned, int move_references,
-        npy_intp *strides,
+        const npy_intp *strides,
         PyArrayMethod_StridedLoop **out_loop,
         NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)
@@ -3720,7 +3710,7 @@ static int
 object_to_object_get_loop(
         PyArrayMethod_Context *NPY_UNUSED(context),
         int NPY_UNUSED(aligned), int move_references,
-        npy_intp *NPY_UNUSED(strides),
+        const npy_intp *NPY_UNUSED(strides),
         PyArrayMethod_StridedLoop **out_loop,
         NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)

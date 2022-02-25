@@ -237,7 +237,7 @@ NPY_NO_EXPORT int
 any_to_object_get_loop(
         PyArrayMethod_Context *context,
         int aligned, int move_references,
-        npy_intp *strides,
+        const npy_intp *strides,
         PyArrayMethod_StridedLoop **out_loop,
         NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)
@@ -343,7 +343,7 @@ NPY_NO_EXPORT int
 object_to_any_get_loop(
         PyArrayMethod_Context *context,
         int NPY_UNUSED(aligned), int move_references,
-        npy_intp *NPY_UNUSED(strides),
+        const npy_intp *NPY_UNUSED(strides),
         PyArrayMethod_StridedLoop **out_loop,
         NpyAuxData **out_transferdata,
         NPY_ARRAYMETHOD_FLAGS *flags)
@@ -3023,9 +3023,9 @@ init_cast_info(
         if (!PyErr_Occurred()) {
             PyErr_Format(PyExc_TypeError,
                     "Cannot cast array data from %R to %R.", src_dtype, dst_dtype);
-            Py_DECREF(meth);
-            return -1;
         }
+        Py_DECREF(meth);
+        return -1;
     }
     assert(PyArray_DescrCheck(cast_info->descriptors[0]));
     assert(PyArray_DescrCheck(cast_info->descriptors[1]));
@@ -3457,11 +3457,11 @@ get_wrapped_legacy_cast_function(int aligned,
      * If we are here, use the legacy code to wrap the above cast (which
      * does not support unaligned data) into copyswapn.
      */
-    PyArray_Descr *src_wrapped_dtype = ensure_dtype_nbo(src_dtype);
+    PyArray_Descr *src_wrapped_dtype = NPY_DT_CALL_ensure_canonical(src_dtype);
     if (src_wrapped_dtype == NULL) {
         goto fail;
     }
-    PyArray_Descr *dst_wrapped_dtype = ensure_dtype_nbo(dst_dtype);
+    PyArray_Descr *dst_wrapped_dtype = NPY_DT_CALL_ensure_canonical(dst_dtype);
     if (dst_wrapped_dtype == NULL) {
         goto fail;
     }

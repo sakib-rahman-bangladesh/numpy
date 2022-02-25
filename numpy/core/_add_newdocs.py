@@ -1598,13 +1598,25 @@ add_newdoc('numpy.core.multiarray', 'arange',
 
     Return evenly spaced values within a given interval.
 
-    Values are generated within the half-open interval ``[start, stop)``
-    (in other words, the interval including `start` but excluding `stop`).
-    For integer arguments the function is equivalent to the Python built-in
-    `range` function, but returns an ndarray rather than a list.
+    ``arange`` can be called with a varying number of positional arguments:
+
+    * ``arange(stop)``: Values are generated within the half-open interval
+      ``[0, stop)`` (in other words, the interval including `start` but
+      excluding `stop`).
+    * ``arange(start, stop)``: Values are generated within the half-open
+      interval ``[start, stop)``.
+    * ``arange(start, stop, step)`` Values are generated within the half-open
+      interval ``[start, stop)``, with spacing between values given by
+      ``step``.
+
+    For integer arguments the function is roughly equivalent to the Python
+    built-in :py:class:`range`, but returns an ndarray rather than a ``range``
+    instance.
 
     When using a non-integer step, such as 0.1, it is often better to use
-    `numpy.linspace`. See the warnings section below for more information.
+    `numpy.linspace`.
+
+    See the Warning sections below for more information.
 
     Parameters
     ----------
@@ -1620,7 +1632,7 @@ add_newdoc('numpy.core.multiarray', 'arange',
         between two adjacent values, ``out[i+1] - out[i]``.  The default
         step size is 1.  If `step` is specified as a position argument,
         `start` must also be given.
-    dtype : dtype
+    dtype : dtype, optional
         The type of the output array.  If `dtype` is not given, infer the data
         type from the other input arguments.
     ${ARRAY_FUNCTION_LIKE}
@@ -1655,6 +1667,20 @@ add_newdoc('numpy.core.multiarray', 'arange',
       array([-3, -2, -1,  0,  1,  2,  3,  4,  5,  6,  7,  8])
 
     In such cases, the use of `numpy.linspace` should be preferred.
+
+    The built-in :py:class:`range` generates :std:doc:`Python built-in integers
+    that have arbitrary size <c-api/long>`, while `numpy.arange` produces
+    `numpy.int32` or `numpy.int64` numbers. This may result in incorrect
+    results for large integer values::
+
+      >>> power = 40
+      >>> modulo = 10000
+      >>> x1 = [(n ** power) % modulo for n in range(8)]
+      >>> x2 = [(n ** power) % modulo for n in np.arange(8)]
+      >>> print(x1)
+      [0, 1, 7776, 8801, 6176, 625, 6576, 4001]  # correct
+      >>> print(x2)
+      [0, 1, 7776, 7185, 0, 5969, 4816, 3361]  # incorrect
 
     See Also
     --------

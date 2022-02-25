@@ -668,6 +668,9 @@ PyArray_NewFromDescr_int(
     PyArrayObject_fields *fa;
     npy_intp nbytes;
 
+    if (descr == NULL) {
+        return NULL;
+    }
     if (nd > NPY_MAXDIMS || nd < 0) {
         PyErr_Format(PyExc_ValueError,
                 "number of dimensions must be within [0, %d]", NPY_MAXDIMS);
@@ -958,6 +961,18 @@ PyArray_NewFromDescr(
         int nd, npy_intp const *dims, npy_intp const *strides, void *data,
         int flags, PyObject *obj)
 {
+    if (subtype == NULL) {
+        PyErr_SetString(PyExc_ValueError,
+            "subtype is NULL in PyArray_NewFromDescr");
+        return NULL;
+    }
+
+    if (descr == NULL) {
+        PyErr_SetString(PyExc_ValueError,
+            "descr is NULL in PyArray_NewFromDescr");
+        return NULL;
+    }
+
     return PyArray_NewFromDescrAndBase(
             subtype, descr,
             nd, dims, strides, data,
@@ -1110,6 +1125,11 @@ NPY_NO_EXPORT PyObject *
 PyArray_NewLikeArray(PyArrayObject *prototype, NPY_ORDER order,
                      PyArray_Descr *dtype, int subok)
 {
+    if (prototype == NULL) {
+        PyErr_SetString(PyExc_ValueError,
+            "prototype is NULL in PyArray_NewLikeArray");
+        return NULL;
+    }
     return PyArray_NewLikeArrayWithShape(prototype, order, dtype, -1, NULL, subok);
 }
 
@@ -1125,6 +1145,12 @@ PyArray_New(
     PyArray_Descr *descr;
     PyObject *new;
 
+    if (subtype == NULL) {
+        PyErr_SetString(PyExc_ValueError,
+            "subtype is NULL in PyArray_New");
+        return NULL;
+    }
+
     descr = PyArray_DescrFromType(type_num);
     if (descr == NULL) {
         return NULL;
@@ -1137,6 +1163,9 @@ PyArray_New(
             return NULL;
         }
         PyArray_DESCR_REPLACE(descr);
+        if (descr == NULL) {
+            return NULL;
+        }
         descr->elsize = itemsize;
     }
     new = PyArray_NewFromDescr(subtype, descr, nd, dims, strides,
@@ -1162,6 +1191,9 @@ _dtype_from_buffer_3118(PyObject *memoryview)
          *       terminate.
          */
         descr = PyArray_DescrNewFromType(NPY_STRING);
+        if (descr == NULL) {
+            return NULL;
+        }
         descr->elsize = view->itemsize;
     }
     return descr;
@@ -1899,6 +1931,9 @@ PyArray_CheckFromAny(PyObject *op, PyArray_Descr *descr, int min_depth,
         if (!descr && PyArray_Check(op) &&
                 PyArray_ISBYTESWAPPED((PyArrayObject* )op)) {
             descr = PyArray_DescrNew(PyArray_DESCR((PyArrayObject *)op));
+            if (descr == NULL) {
+                return NULL;
+            }
         }
         else if (descr && !PyArray_ISNBO(descr->byteorder)) {
             PyArray_DESCR_REPLACE(descr);
@@ -3559,6 +3594,10 @@ PyArray_FromFile(FILE *fp, PyArray_Descr *dtype, npy_intp num, char *sep)
     PyArrayObject *ret;
     size_t nread = 0;
 
+    if (dtype == NULL) {
+        return NULL;
+    }
+
     if (PyDataType_REFCHK(dtype)) {
         PyErr_SetString(PyExc_ValueError,
                 "Cannot read into object array");
@@ -3626,6 +3665,9 @@ PyArray_FromBuffer(PyObject *buf, PyArray_Descr *type,
     int itemsize;
     int writeable = 1;
 
+    if (type == NULL) {
+        return NULL;
+    }
 
     if (PyDataType_REFCHK(type)) {
         PyErr_SetString(PyExc_ValueError,
@@ -3833,14 +3875,20 @@ NPY_NO_EXPORT PyObject *
 PyArray_FromIter(PyObject *obj, PyArray_Descr *dtype, npy_intp count)
 {
     PyObject *value;
-    PyObject *iter = PyObject_GetIter(obj);
+    PyObject *iter = NULL;
     PyArrayObject *ret = NULL;
     npy_intp i, elsize, elcount;
     char *item, *new_data;
 
+    if (dtype == NULL) {
+        return NULL;
+    }
+
+    iter = PyObject_GetIter(obj);
     if (iter == NULL) {
         goto done;
     }
+
     if (PyDataType_ISUNSIZED(dtype)) {
         PyErr_SetString(PyExc_ValueError,
                 "Must specify length when using variable-size data-type.");
@@ -3972,7 +4020,6 @@ _array_fill_strides(npy_intp *strides, npy_intp const *dims, int nd, size_t item
                     int inflag, int *objflags)
 {
     int i;
-#if NPY_RELAXED_STRIDES_CHECKING
     npy_bool not_cf_contig = 0;
     npy_bool nod = 0; /* A dim != 1 was found */
 
@@ -3986,7 +4033,6 @@ _array_fill_strides(npy_intp *strides, npy_intp const *dims, int nd, size_t item
             nod = 1;
         }
     }
-#endif /* NPY_RELAXED_STRIDES_CHECKING */
 
     /* Only make Fortran strides if not contiguous as well */
     if ((inflag & (NPY_ARRAY_F_CONTIGUOUS|NPY_ARRAY_C_CONTIGUOUS)) ==
@@ -3996,7 +4042,6 @@ _array_fill_strides(npy_intp *strides, npy_intp const *dims, int nd, size_t item
             if (dims[i]) {
                 itemsize *= dims[i];
             }
-#if NPY_RELAXED_STRIDES_CHECKING
             else {
                 not_cf_contig = 0;
             }
@@ -4006,13 +4051,8 @@ _array_fill_strides(npy_intp *strides, npy_intp const *dims, int nd, size_t item
                 strides[i] = NPY_MAX_INTP;
             }
 #endif /* NPY_RELAXED_STRIDES_DEBUG */
-#endif /* NPY_RELAXED_STRIDES_CHECKING */
         }
-#if NPY_RELAXED_STRIDES_CHECKING
         if (not_cf_contig) {
-#else /* not NPY_RELAXED_STRIDES_CHECKING */
-        if ((nd > 1) && ((strides[0] != strides[nd-1]) || (dims[nd-1] > 1))) {
-#endif /* not NPY_RELAXED_STRIDES_CHECKING */
             *objflags = ((*objflags)|NPY_ARRAY_F_CONTIGUOUS) &
                                             ~NPY_ARRAY_C_CONTIGUOUS;
         }
@@ -4026,7 +4066,6 @@ _array_fill_strides(npy_intp *strides, npy_intp const *dims, int nd, size_t item
             if (dims[i]) {
                 itemsize *= dims[i];
             }
-#if NPY_RELAXED_STRIDES_CHECKING
             else {
                 not_cf_contig = 0;
             }
@@ -4036,13 +4075,8 @@ _array_fill_strides(npy_intp *strides, npy_intp const *dims, int nd, size_t item
                 strides[i] = NPY_MAX_INTP;
             }
 #endif /* NPY_RELAXED_STRIDES_DEBUG */
-#endif /* NPY_RELAXED_STRIDES_CHECKING */
         }
-#if NPY_RELAXED_STRIDES_CHECKING
         if (not_cf_contig) {
-#else /* not NPY_RELAXED_STRIDES_CHECKING */
-        if ((nd > 1) && ((strides[0] != strides[nd-1]) || (dims[0] > 1))) {
-#endif /* not NPY_RELAXED_STRIDES_CHECKING */
             *objflags = ((*objflags)|NPY_ARRAY_C_CONTIGUOUS) &
                                             ~NPY_ARRAY_F_CONTIGUOUS;
         }
